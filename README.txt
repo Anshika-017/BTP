@@ -1,4 +1,4 @@
-# Gamma-Ray Detector Calibration and Parameter Estimation
+Gamma-Ray Detector Calibration and Parameter Estimation
 
 ## Overview
 
