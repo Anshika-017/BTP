@@ -70,19 +70,44 @@ The calibration positions are provided in `gridp.txt` in cylindrical coordinates
 
 These positions are converted into Cartesian coordinates before reconstruction:
 
-\[
+$$
 x=R\cos(\theta), \qquad y=R\sin(\theta)
-\]
+$$
 
 The angular value is converted from degrees to radians during the calculation.
 
-### 2. Detector Reconstruction
+### 2. Calibration Point Weights
+
+The experimentally measured counts \(M_i\) for the 108 calibration points are read from `det1.txt`. The relative weight of each point is:
+
+$$
+W_i=\frac{\sqrt{M_i}}{\sqrt{\sum_{j=1}^{108}M_j}}
+$$
+
+where:
+
+- \(W_i\) is the weight assigned to the \(i\)-th calibration point.
+- \(M_i\) is the experimentally measured count at the \(i\)-th point.
+
+The weight represents the relative importance of each calibration point when the overall error is calculated.
+
+### 3. Detector Reconstruction
 
 The function `reconF()` in `reconF.h` calculates the theoretical detector count for a given calibration position and a selected set of fitting parameters.
 
 It uses the detector geometry to determine the relevant distances and geometrical quantities before calling the Monte Carlo simulation.
 
-### 3. Monte Carlo Simulation
+### 4. Distance Travelled and Interaction Probability
+
+For each simulated gamma ray, the program calculates the distance travelled inside the detector crystal. This path length is used to calculate the probability of interaction inside the detector:
+
+$$
+P=1-e^{-\mu d}
+$$
+
+where \(d\) is the calculated path length and \(\mu\) is the total attenuation coefficient.
+
+### 5. Monte Carlo Simulation and Efficiency
 
 The Monte Carlo model estimates the detector efficiency by simulating possible gamma-ray trajectories and their interactions inside the detector.
 
@@ -96,9 +121,37 @@ The simulation considers:
 
 The simulation uses 12,000 Monte Carlo histories per calculation in the current implementation.
 
-The resulting efficiency is used to calculate the theoretical detector count.
+For each simulated gamma ray, the program:
 
-### 4. Parameter Estimation
+1. Calculates the interaction probability inside the detector.
+2. Accounts for attenuation through the detector wall.
+3. Calculates the angular weights (theta weight \(w_\theta\) and alpha weight \(w_\alpha\)).
+4. Multiplies the interaction probability by both weights and accumulates the result.
+
+The final efficiency is:
+
+$$
+\varepsilon=\frac{1}{N}\sum_{i=1}^{N}P_i\,w_{\theta,i}\,w_{\alpha,i}
+$$
+
+where:
+
+- \(N=12{,}000\) is the number of Monte Carlo iterations.
+- \(P_i\) is the interaction probability of the \(i\)-th simulated gamma ray.
+- \(w_{\theta,i}\) is the theta weight (angular weight for the polar angle) of the \(i\)-th gamma ray.
+- \(w_{\alpha,i}\) is the alpha weight (angular weight for the angle \(\alpha\)) of the \(i\)-th gamma ray.
+
+\(P_i\) includes the detector interaction and the attenuation through the detector wall:
+
+$$
+P_i=\left(1-e^{-\mu d_i}\right)e^{-\mu_{\text{wall}}t_i/\cos\theta_i}
+$$
+
+where \(d_i\) is the path length travelled inside the detector, \(\mu\) is the total attenuation coefficient of the detector, \(\mu_{\text{wall}}\) is the attenuation coefficient of the wall, \(t_i\) is the wall thickness, and \(\theta_i\) is the angle of the ray.
+
+The final efficiency is stored in the variable `inteff` in the program, and is used to calculate the theoretical detector count.
+
+### 6. Parameter Estimation
 
 The main program, `calcu.cpp`, estimates the fitting parameters:
 
@@ -118,24 +171,30 @@ The program randomly selects parameter values within the specified ranges and ev
 
 **Note:** `wallmu` is fixed in the current implementation because its minimum and maximum values are identical.
 
-### 5. Error Calculation
+### 7. Error Calculation
 
-For each calibration position, the predicted detector count is compared with the experimentally measured count.
+**Relative error term.** For each of the 108 calibration points, the symmetric relative difference between the theoretical and experimental counts is calculated:
 
-The relative error is calculated as:
-
-\[
+$$
 t_i=\frac{C_i-M_i}{(C_i+M_i)/2}
-\]
+$$
 
 where:
 
-- \(C_i\) is the theoretically calculated count.
+- \(C_i\) is the theoretically predicted count.
 - \(M_i\) is the experimentally measured count.
 
-The squared relative error is combined with the corresponding calibration-point weight to obtain the contribution from each point.
+**Weighted error contribution.** The relative difference is squared and multiplied by the corresponding weight:
 
-The total error is obtained by summing the contributions from all 108 calibration points.
+$$
+\phi_i=W_i\,(t_i)^2
+$$
+
+**Total error.** The individual contributions are summed over all 108 calibration points:
+
+$$
+E_{\text{total}}=\sum_{i=1}^{108}\phi_i
+$$
 
 The parameter combination producing the lowest total error is retained as the best result.
 
@@ -197,9 +256,9 @@ The terminal also displays the trial number, updates when a new best error is fo
 
 In the current implementation, the best error obtained is approximately:
 
-\[
+$$
 E_{\text{best}}\approx 1.61
-\]
+$$
 
 The corresponding parameter values are approximately:
 
@@ -209,9 +268,9 @@ The corresponding parameter values are approximately:
 
 The desired error threshold is:
 
-\[
+$$
 E_{\text{target}}=0.006
-\]
+$$
 
 The current implementation has not yet reached this target. The reported result is the best value found within the tested parameter search and trial limit, not a converged solution.
 
@@ -219,15 +278,16 @@ The current implementation has not yet reached this target. The reported result 
 
 ### 1. Optimisation of the Error Function
 
-- Explore alternative combinations of error calculation terms.
-- Investigate different approaches to comparing theoretical and experimental counts.
-- Identify an error function that provides better agreement and reduces the total error.
+- Investigate alternative error calculation methods and different combinations of error terms.
+- Compare their performance to identify an error function that minimises the difference between theoretically predicted and experimentally measured counts.
+- Evaluate the effect of different weighting approaches on the overall error.
 
-### 2. Improvement of Random Number Selection
+### 2. Improvement of Random Number Selection and Sampling
 
-- Experiment with alternative random-number selection methods during parameter estimation.
-- Explore improved sampling strategies for selecting fitting parameters.
-- Investigate modifications to random-number generation in the Monte Carlo simulation to improve sampling and potentially reduce the total error.
+- Experiment with alternative random-number selection strategies for choosing the fitting parameters `wallmu`, `ss`, and `tau`.
+- Explore different sampling techniques instead of relying only on the current random selection within fixed parameter ranges.
+- Investigate modifications to random-number generation and sampling in the Monte Carlo simulation to better represent possible gamma-ray trajectories.
+- Assess whether improved parameter sampling and Monte Carlo sampling lead to more stable efficiency estimates and lower total error.
 
 ## Notes
 
